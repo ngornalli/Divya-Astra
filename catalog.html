@@ -229,7 +229,7 @@
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpeXpkZW1rbm50Z3R6eWJ0YmdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM4NzA3MzcsImV4cCI6MjA3OTQ0NjczN30.mjWQmJBfZQkZyh2xuqYBVplkTyOePYkIkxwEPJCmC4w";
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         console.log("123");
-        console.log(TEST_VARIABLE);
+        console.log(${{ secrets.TEST_VARIABLE }});
         console.log("456");
         const STAT_CONFIG = {
             destruction: { label: 'Destruction', icon: 'flame', color: '#ef4444' },
