@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Celestial Arsenal - Weapon Catalog</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { serif: ['Cinzel', 'serif'], sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+                    colors: { bg: '#020617', surface: '#0f172a', muted: '#64748b' },
+                    animation: { 
+                        'fade-in': 'fadeIn 0.5s ease-out', 
+                        'slide-up': 'slideUp 0.6s ease-out',
+                        'float': 'float 6s ease-in-out infinite'
+                    },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+                        float: { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-15px)' } }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #020617; color: #f8fafc; font-family: 'Inter', sans-serif; overflow-x: hidden; transition: background 1s ease; }
+        
+        /* Dynamic Theme Variables */
+        :root { --theme-color: #f59e0b; }
+
+        /* Glassmorphism */
+        .glass { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .glass-panel { background: rgba(2, 6, 23, 0.8); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #020617; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--theme-color); }
+
+        /* Chart Elements */
+        .radar-poly { 
+            fill: var(--poly-color, var(--theme-color)); fill-opacity: 0.2;
+            stroke: var(--poly-color, var(--theme-color)); stroke-width: 2; 
+            filter: drop-shadow(0 0 8px var(--poly-color, var(--theme-color)));
+            transition: all 1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .radar-grid { stroke: rgba(255, 255, 255, 0.1); stroke-width: 1; fill: none; }
+        .radar-axis { stroke: rgba(255, 255, 255, 0.1); stroke-width: 1; }
+
+        .stat-bar-bg { background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden; }
+        .stat-bar-fill { height: 100%; width: 0%; border-radius: 4px; position: relative; transition: width 1s cubic-bezier(0.34, 1.56, 0.64, 1); background-color: var(--bar-color, var(--theme-color)); }
+        .stat-bar-fill::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 2px; background: white; box-shadow: 0 0 10px white; }
+
+        /* Donut Chart */
+        .donut-ring { 
+            width: 90px; height: 90px; border-radius: 50%; 
+            background: conic-gradient(var(--d-color, var(--theme-color)) var(--d-val), #1e293b 0deg); 
+            display: flex; align-items: center; justify-content: center; 
+            position: relative; box-shadow: 0 0 25px rgba(0,0,0,0.5);
+        }
+        .donut-hole { width: 72px; height: 72px; background: #020617; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
+
+        /* Utilities */
+        .text-theme { color: var(--theme-color); }
+        #search-input:focus { border-color: var(--theme-color); }
+    </style>
+</head>
+
+<body class="h-screen w-screen flex flex-col relative">
+
+    <div id="ambient-bg" class="fixed inset-0 z-0 transition-colors duration-1000 opacity-20"></div>
+    <div class="fixed inset-0 z-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30"></div>
+
+    <header class="h-16 border-b border-white/10 bg-bg/80 backdrop-blur-md flex items-center justify-between px-4 md:px-6 z-50 shrink-0 gap-1">
+        <div class="flex items-center gap-3 shrink-0">
+            <div class="p-2 bg-white/5 rounded-lg border border-white/10"><i data-lucide="database" class="text-theme w-5 h-5"></i></div>
+            <div class="hidden md:block">
+                <h1 class="text-lg font-black font-serif tracking-widest text-white">CELESTIAL <span class="text-theme">ARCHIVES</span></h1>
+            </div>
+        </div>
+
+        <div class="flex-1 max-w-md relative">
+            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted"></i>
+            <input type="text" id="search-input" oninput="handleSearch(this.value)" placeholder="Search arsenal..." class="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder:text-muted focus:outline-none transition-colors">
+        </div>
+
+        <div class="flex items-center gap-1 shrink-0">
+            <div class="hidden md:flex items-center gap-1">
+                <button onclick="prevWeapon()" class="p-2 hover:bg-white/10 rounded-full transition-colors"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+                <div class="text-xs font-mono text-muted">
+                    <span id="current-index" class="text-white font-bold">00</span> / <span id="total-count">00</span>
+                </div>
+                <button onclick="nextWeapon()" class="p-2 hover:bg-white/10 rounded-full transition-colors"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+            </div>
+            <button onclick="window.location.href='index.html'" class="px-3 py-2 md:px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-bold uppercase transition-colors flex items-center gap-1">
+                <i data-lucide="log-out" class="w-3 h-3"></i> <span class="hidden md:inline">Exit</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 relative z-10 flex flex-col md:flex-row overflow-hidden">
+        
+        <div class="w-full md:w-5/12 h-[45vh] md:h-full relative flex flex-col items-center justify-center p-2 group bg-gradient-to-b from-bg to-surface/50 border-b md:border-b-0 md:border-r border-white/5 shrink-0">
+            <div class="relative w-full max-w-xs md:max-w-sm aspect-[3/4] animate-float z-10">
+                <div id="image-glow" class="absolute inset-0 bg-theme-20 blur-[80px] rounded-full transition-colors duration-1000"></div>
+                <div class="relative w-full h-full rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl glass-panel group-hover:border-white/20 transition-colors duration-500">
+                    <img id="weapon-img" src="" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="Weapon Art">
+                    <div class="absolute inset-0 bg-gradient-to-t from-bg via-transparent to-transparent"></div>
+                    
+                    <div class="absolute bottom-6 left-6 right-6">
+                        <h2 id="weapon-name" class="text-3xl md:text-5xl font-black font-serif text-white leading-none drop-shadow-xl">Loading...</h2>
+                        <div id="weapon-name-hi" class="text-lg md:text-2xl font-serif text-theme opacity-80 mt-1 drop-shadow-md"></div>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="prevWeapon()" class="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-white/10 rounded-full border border-white/10 backdrop-blur-md transition-all hover:scale-110 hidden md:flex"><i data-lucide="chevron-left" class="w-8 h-8 text-white"></i></button>
+            <button onclick="nextWeapon()" class="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-white/10 rounded-full border border-white/10 backdrop-blur-md transition-all hover:scale-110 hidden md:flex"><i data-lucide="chevron-right" class="w-8 h-8 text-white"></i></button>
+        </div>
+
+        <div class="w-full md:w-7/12 flex-1 md:h-full bg-bg relative overflow-hidden">
+            <div class="absolute inset-0 overflow-y-auto custom-scrollbar p-2 md:p-6 pb-32">
+                
+                <div id="data-header" class="flex flex-col xl:flex-row items-center xl:items-start justify-between gap-1 mb-4 animate-slide-up transition-opacity duration-300">
+                    <div class="flex flex-col items-center xl:items-start gap-1">
+                        <div class="flex items-center gap-2">
+                            <div id="power-donut" class="donut-ring shrink-0" style="--d-val: 0%">
+                                <div class="donut-hole">
+                                    <span class="text-[9px] font-bold text-muted">AVG</span>
+                                    <span id="weapon-avg" class="text-2xl font-bold text-white">0</span>
+                                </div>
+                            </div>
+                            <div class="text-center xl:text-left">
+                                <div class="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Power Grade</div>
+                                <div id="weapon-grade" class="text-5xl font-black text-theme leading-none">-</div>
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-400 font-mono bg-white/5 px-3 py-1 rounded-full border border-white/5">ID: <span id="weapon-id" class="text-white">#---</span></div>
+                    </div>
+
+                    <div class="flex flex-col items-center xl:items-end w-full xl:w-auto">
+                        <div class="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Deity / Origin</div>
+                        <div class="flex items-center gap-3 bg-white/5 px-6 py-3 rounded-xl border border-white/10 shadow-lg backdrop-blur-md">
+                            <i data-lucide="sparkles" class="w-5 h-5 text-theme"></i>
+                            <span id="weapon-deity" class="text-xl font-bold text-white uppercase tracking-wide">---</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="data-intel" class="grid grid-cols-1 gap-1 mb-4 animate-slide-up transition-opacity duration-300" style="animation-delay: 0.1s">
+                    <div class="bg-surface/30 border border-white/5 rounded-xl p-2 relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-theme-20"></div> 
+                        
+                        <div class="mb-4">
+                            <div class="text-[10px] font-bold text-muted uppercase tracking-widest mb-1">Archive Data</div>
+                            <p id="weapon-desc" class="text-sm text-gray-300 leading-relaxed font-serif italic">---</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-1 pt-4 border-t border-white/5">
+                            <div>
+                                <div class="text-[9px] font-bold text-muted uppercase tracking-widest mb-1">Class / Specialty</div>
+                                <div id="weapon-specialty" class="text-xs font-bold text-theme uppercase bg-theme-10 px-2 py-1 rounded w-fit border border-white/10">---</div>
+                            </div>
+                            <div>
+                                <div class="text-[9px] font-bold text-muted uppercase tracking-widest mb-1">Historical Wielder</div>
+                                <div class="flex items-center gap-1">
+                                    <i data-lucide="user" class="w-3 h-3 text-gray-400"></i>
+                                    <span id="weapon-history" class="text-xs font-bold text-white">---</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tactical-row" class="flex flex-col md:flex-row gap-1 mb-4 animate-slide-up transition-opacity duration-300 items-stretch" style="animation-delay: 0.15s">
+                    
+                    <div id="weakness-box" class="flex-1 bg-red-950/20 border border-red-500/20 rounded-xl p-2 flex flex-col justify-center min-h-[180px] hidden">
+                        <div class="flex items-center gap-1 text-red-400 mb-2">
+                            <i data-lucide="shield-alert" class="w-5 h-5"></i>
+                            <div class="text-[10px] font-bold uppercase tracking-widest">Tactical Vulnerability</div>
+                        </div>
+                        <div id="weapon-weakness" class="text-lg font-bold text-red-100 leading-snug">None</div>
+                    </div>
+
+                    <div class="flex-1 bg-surface/30 border border-white/5 rounded-xl p-4 flex flex-col items-center justify-center relative min-h-[180px]">
+                        <div class="text-[9px] font-bold text-muted uppercase tracking-widest mb-2 absolute top-4 left-4">Attribute Matrix</div>
+                        <div class="w-32 h-32 md:w-40 md:h-40"> 
+                             <svg id="radar-chart" viewBox="0 0 200 200" class="w-full h-full drop-shadow-2xl"></svg>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="data-stats" class="animate-slide-up transition-opacity duration-300" style="animation-delay: 0.2s">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="text-xs font-bold text-white uppercase tracking-widest">Performance Metrics</div>
+                        <div id="stat-desc-box" class="text-[10px] font-mono text-theme bg-white/5 px-3 py-1 rounded border border-white/5 transition-all">
+                            Hover bars for details
+                        </div>
+                    </div>
+                    
+                    <div id="stats-container" class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+                        </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <div class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-bg/90 backdrop-blur-xl border-t border-white/10 z-50 flex items-center justify-between px-6">
+        <button onclick="prevWeapon()" class="p-3 bg-white/5 rounded-full"><i data-lucide="chevron-left" class="w-5 h-5 text-white"></i></button>
+        <span class="text-xs font-bold text-theme uppercase tracking-widest">NAVIGATE</span>
+        <button onclick="nextWeapon()" class="p-3 bg-white/5 rounded-full"><i data-lucide="chevron-right" class="w-5 h-5 text-white"></i></button>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://hiyzdemknntgtzybtbgr.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpeXpkZW1rbm50Z3R6eWJ0YmdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM4NzA3MzcsImV4cCI6MjA3OTQ0NjczN30.mjWQmJBfZQkZyh2xuqYBVplkTyOePYkIkxwEPJCmC4w";
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const STAT_CONFIG = {
+            destruction: { label: 'Destruction', icon: 'flame', color: '#ef4444' },
+            precision: { label: 'Precision', icon: 'crosshair', color: '#3b82f6' },
+            range: { label: 'Range', icon: 'radar', color: '#10b981' },
+            speed: { label: 'Speed', icon: 'zap', color: '#eab308' },
+            durability: { label: 'Durability', icon: 'shield', color: '#f97316' },
+            mysticism: { label: 'Mysticism', icon: 'sparkles', color: '#a855f7' }
+        };
+
+        const STAT_DESCRIPTIONS = {
+            destruction: "Capacity for raw physical damage.",
+            precision: "Accuracy and hit probability.",
+            range: "Maximum effective combat distance.",
+            speed: "Velocity of deployment and travel.",
+            durability: "Resistance to counter-measures.",
+            mysticism: "Magical and spiritual energy potency."
+        };
+
+        const FALLBACK_DATA = [
+            { id: 1, name: "Sudarshana Chakra", name_hi: "सुदर्शन चक्र", deity: "Vishnu", color: "#0ea5e9", desc: "The spinning disc of cosmic order.", history: "Used by Krishna.", specialty: "Inescapable homing", weaknesses: ["Cannot act against its creator"], stats: { range: 95, speed: 100, mysticism: 98, precision: 100, durability: 100, destruction: 99 } }
+        ];
+
+        let allWeapons = [];
+        let displayedWeapons = [];
+        let currentIndex = 0;
+
+        async function init() {
+            lucide.createIcons();
+            try {
+                const { data } = await supabase.from('weapons').select('*');
+                allWeapons = (data && data.length) ? data : FALLBACK_DATA;
+            } catch {
+                allWeapons = FALLBACK_DATA;
+            }
+            displayedWeapons = [...allWeapons];
+            updateTotalCount();
+            renderWeapon(0);
+            
+            document.addEventListener('keydown', (e) => {
+                if(e.key === 'ArrowRight') nextWeapon();
+                if(e.key === 'ArrowLeft') prevWeapon();
+            });
+        }
+
+        function updateTotalCount() {
+            document.getElementById('total-count').innerText = String(displayedWeapons.length).padStart(2, '0');
+        }
+
+        function handleSearch(query) {
+            const q = query.toLowerCase().trim();
+            if (!q) {
+                displayedWeapons = [...allWeapons];
+            } else {
+                displayedWeapons = allWeapons.filter(w => 
+                    w.name.toLowerCase().includes(q) || 
+                    (w.name_hi && w.name_hi.toLowerCase().includes(q))
+                );
+            }
+            updateTotalCount();
+            renderWeapon(0);
+        }
+
+        function renderWeapon(index) {
+            if (displayedWeapons.length === 0) {
+                renderNoResults();
+                return;
+            }
+
+            // Ensure data sections are visible
+            ['data-header', 'data-intel', 'data-stats', 'tactical-row'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.style.opacity = '1';
+            });
+
+            if(index < 0) index = displayedWeapons.length - 1;
+            if(index >= displayedWeapons.length) index = 0;
+            currentIndex = index;
+
+            const w = displayedWeapons[index];
+            const avg = Math.round(Object.values(w.stats).reduce((a,b)=>a+b,0)/6);
+            const themeColor = w.color || '#f59e0b';
+            document.documentElement.style.setProperty('--theme-color', themeColor);
+
+            // 1. Text Data
+            document.getElementById('current-index').innerText = String(index + 1).padStart(2, '0');
+            document.getElementById('weapon-id').innerText = `#${String(w.id).padStart(3,'0')}`;
+            document.getElementById('weapon-name').innerText = w.name;
+            document.getElementById('weapon-name-hi').innerText = w.name_hi || '';
+            document.getElementById('weapon-deity').innerText = w.deity;
+            document.getElementById('weapon-specialty').innerText = w.specialty || 'General';
+            document.getElementById('weapon-desc').innerText = `"${w.desc}"`;
+            document.getElementById('weapon-history').innerText = w.history || 'Data Classified';
+            
+            // 2. Donut & Grade
+            animateDonut(avg, themeColor);
+            document.getElementById('weapon-grade').innerText = avg >= 95 ? 'S+' : (avg >= 90 ? 'S' : (avg >= 80 ? 'A' : 'B'));
+
+            // 3. Weakness & Radar Layout
+            const weakEl = document.getElementById('weakness-box');
+            if (w.weaknesses && w.weaknesses.length > 0) {
+                // If weakness exists, show it (flex)
+                weakEl.classList.remove('hidden');
+                weakEl.classList.add('flex');
+                document.getElementById('weapon-weakness').innerText = w.weaknesses.join(", ");
+            } else {
+                // If no weakness, hide it (the radar chart will automatically expand if using flex-1, 
+                // but we keep consistent layout by using hidden)
+                weakEl.classList.remove('flex');
+                weakEl.classList.add('hidden');
+            }
+
+            // 4. Image
+            const img = document.getElementById('weapon-img');
+            img.style.opacity = '0';
+            setTimeout(() => {
+                img.src = `image/${w.id}.jpg`;
+                img.onerror = () => { img.src = `https://source.unsplash.com/600x800/?abstract,${w.deity}`; };
+                img.style.opacity = '1';
+            }, 150);
+
+            document.getElementById('image-glow').style.backgroundColor = themeColor;
+            document.getElementById('ambient-bg').style.background = `radial-gradient(circle at 80% 20%, ${themeColor} 0%, transparent 60%)`;
+
+            // 5. Stat Bars
+            const statsContainer = document.getElementById('stats-container');
+            statsContainer.innerHTML = Object.keys(w.stats).map(k => {
+                const conf = STAT_CONFIG[k] || { label: k, icon: 'activity', color: '#888' };
+                const val = w.stats[k];
+                return `
+                <div class="group" onmouseenter="updateStatDesc('${k}')" onmouseleave="resetStatDesc()">
+                    <div class="flex justify-between items-end mb-1">
+                        <div class="flex items-center gap-1">
+                            <i data-lucide="${conf.icon}" class="w-4 h-4 text-muted group-hover:text-white transition-colors"></i>
+                            <span class="text-xs font-bold text-muted group-hover:text-white uppercase tracking-wider transition-colors">${conf.label}</span>
+                        </div>
+                        <span class="text-sm font-mono font-bold text-white">${val}</span>
+                    </div>
+                    <div class="stat-bar-bg">
+                        <div class="stat-bar-fill" id="bar-${k}" style="width: 0%; --bar-color: ${conf.color}"></div>
+                    </div>
+                </div>`;
+            }).join('');
+            lucide.createIcons();
+            setTimeout(() => {
+                Object.keys(w.stats).forEach(k => {
+                    const bar = document.getElementById(`bar-${k}`);
+                    if(bar) bar.style.width = `${w.stats[k]}%`;
+                });
+            }, 100);
+
+            // 6. Radar Chart
+            drawRadarChart(w.stats, themeColor);
+        }
+
+        function renderNoResults() {
+            document.getElementById('weapon-name').innerText = "No Weapons Found";
+            document.getElementById('weapon-name-hi').innerText = "";
+            document.getElementById('current-index').innerText = "00";
+            document.getElementById('weapon-img').style.opacity = '0';
+            document.documentElement.style.setProperty('--theme-color', '#64748b');
+            ['data-header', 'data-intel', 'data-stats', 'tactical-row'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.style.opacity = '0';
+            });
+        }
+
+        function animateDonut(target, color) {
+            const donut = document.getElementById('power-donut');
+            const text = document.getElementById('weapon-avg');
+            let current = 0;
+            donut.style.setProperty('--d-color', color);
+            donut.style.setProperty('--d-val', `0%`);
+            const interval = setInterval(() => {
+                if(current >= target) { clearInterval(interval); current = target; }
+                donut.style.setProperty('--d-val', `${current}%`);
+                text.innerText = current;
+                current++;
+            }, 10);
+        }
+
+        function prevWeapon() { renderWeapon(currentIndex - 1); }
+        function nextWeapon() { renderWeapon(currentIndex + 1); }
+
+        function updateStatDesc(key) {
+            const el = document.getElementById('stat-desc-box');
+            if(el) {
+                el.innerText = STAT_DESCRIPTIONS[key] || "Analysis Unavailable";
+                el.classList.add('text-white', 'bg-white/10');
+                el.classList.remove('text-theme', 'bg-theme-10');
+            }
+        }
+
+        function resetStatDesc() {
+            const el = document.getElementById('stat-desc-box');
+            if(el) {
+                el.innerText = "Hover bars for details";
+                el.classList.remove('text-white', 'bg-white/10');
+                el.classList.add('text-theme', 'bg-theme-10');
+            }
+        }
+
+        function drawRadarChart(stats, color) {
+            const svg = document.getElementById('radar-chart');
+            svg.innerHTML = '';
+            const keys = Object.keys(STAT_CONFIG);
+            const count = keys.length;
+            const center = 100; const radius = 70; const angleStep = (Math.PI * 2) / count;
+            let gridHTML = '';
+            [0.3, 0.6, 1].forEach(scale => {
+                let points = [];
+                for(let i=0; i<count; i++) {
+                    const angle = i * angleStep - Math.PI/2;
+                    const r = radius * scale;
+                    points.push(`${center + r * Math.cos(angle)},${center + r * Math.sin(angle)}`);
+                }
+                gridHTML += `<polygon points="${points.join(' ')}" class="radar-grid" />`;
+            });
+            for(let i=0; i<count; i++) {
+                const angle = i * angleStep - Math.PI/2;
+                const x = center + radius * Math.cos(angle);
+                const y = center + radius * Math.sin(angle);
+                gridHTML += `<line x1="${center}" y1="${center}" x2="${x}" y2="${y}" class="radar-axis" />`;
+            }
+            let dataPoints = [];
+            keys.forEach((k, i) => {
+                const val = (stats[k] || 0) / 100;
+                const angle = i * angleStep - Math.PI/2;
+                const r = radius * val;
+                dataPoints.push(`${center + r * Math.cos(angle)},${center + r * Math.sin(angle)}`);
+            });
+            const poly = `<polygon points="${dataPoints.join(' ')}" class="radar-poly" style="--poly-color: ${color}; transform: scale(0); transform-origin: center;" />`;
+            svg.innerHTML = gridHTML + poly;
+            setTimeout(() => { svg.querySelector('.radar-poly').style.transform = "scale(1)"; }, 50);
+        }
+
+        init();
+    </script>
+</body>
+</html>
