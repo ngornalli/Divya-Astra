@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Divya Astra - Tactical Interface</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { serif: ['Cinzel', 'serif'], sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+                    colors: { bg: '#020617', surface: '#0f172a', primary: '#f59e0b', muted: '#64748b' },
+                    boxShadow: { 'glow': '0 0 20px rgba(245, 158, 11, 0.4)', 'divine': '0 0 50px rgba(245, 158, 11, 0.25)' },
+                    animation: { 'fade': 'fadeIn 0.3s ease-out', 'pop': 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)' },
+                    keyframes: { 
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        popIn: { '0%': { opacity: '0', transform: 'scale(0.8)' }, '100%': { opacity: '1', transform: 'scale(1)' } }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background: #020617; color: #f8fafc; overflow: hidden; font-family: 'Inter', sans-serif; }
+        
+        /* SCROLLBARS */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #f59e0b; }
+
+        /* CARD STYLE */
+        .card {
+            background: #0f172a; border: 1px solid #334155; border-radius: 12px;
+            overflow: hidden; transition: all 0.2s; position: relative;
+            display: flex; flex-direction: column; flex-shrink: 0;
+        }
+        .card:hover { transform: translateY(-5px); border-color: #f59e0b; z-index: 10; }
+        .card.selected { border-color: #f59e0b; box-shadow: 0 0 30px rgba(245, 158, 11, 0.4); transform: translateY(-8px); z-index: 20; }
+        
+        .card-hand { width: 100%; aspect-ratio: 2/3; }
+        .card-stage { width: 180px; height: 280px; }
+        
+        /* RESOLUTION CARD */
+        .card-res {
+            width: 280px; background: #0b1221; border: 1px solid #334155; border-radius: 16px;
+            overflow: hidden; position: relative; flex-shrink: 0; padding: 12px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .card-res.winner { border: 2px solid #f59e0b; box-shadow: 0 0 40px rgba(245, 158, 11, 0.2); transform: scale(1.02); z-index: 10; }
+
+        @media (min-width: 768px) {
+            .card-hand { width: 160px; height: 240px; }
+            .card-stage { width: 240px; height: 360px; }
+            .card-res { width: 320px; }
+        }
+
+        /* LAYOUTS */
+        .arena-hand { width: 100%; height: 100%; overflow-y: auto; padding: 1rem; }
+        .hand-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; padding-bottom: 4rem; }
+        @media (min-width: 768px) {
+            .arena-hand { display: flex; align-items: flex-end; justify-content: center; padding-bottom: 2rem; overflow-x: auto; overflow-y: hidden; }
+            .hand-grid { display: flex; gap: 1rem; width: auto; padding-bottom: 0; }
+        }
+
+        .arena-stage {
+            display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+            height: 100%; gap: 1.5rem; padding: 1.5rem; overflow-y: auto;
+        }
+
+        /* STAT BUTTONS */
+        .stat-btn {
+            background: #020617; border: 1px solid #334155; border-radius: 12px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 1.5rem; transition: all 0.2s; height: 100px;
+        }
+        .stat-btn:hover { border-color: var(--btn-color); box-shadow: 0 0 15px var(--btn-color-glow); background: rgba(255,255,255,0.03); transform: translateY(-2px); }
+        .stat-icon-circle {
+            width: 32px; height: 32px; border-radius: 50%; border: 1px solid #334155;
+            display: flex; align-items: center; justify-content: center; margin-bottom: 8px;
+            color: var(--btn-color);
+        }
+        .stat-btn:hover .stat-icon-circle { border-color: var(--btn-color); background: rgba(255,255,255,0.1); }
+        .stat-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--btn-color); }
+
+        /* PROGRESS BARS & CHARTS */
+        .stat-bar-bg { background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+        .stat-bar-fill { height: 100%; transition: width 0.5s ease-out; }
+        
+        .donut-chart {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: conic-gradient(var(--d-color) var(--d-val), #1e293b 0deg);
+            display: flex; align-items: center; justify-content: center; position: relative;
+        }
+        .donut-inner { width: 32px; height: 32px; background: #0b1221; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; color: white; }
+
+        /* BIG MANIFESTATION CIRCLE */
+        .manifest-circle {
+            width: 140px; height: 140px; border-radius: 50%;
+            background: conic-gradient(var(--m-color) var(--m-val)%, #1e293b 0deg);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 30px var(--m-glow);
+            position: relative;
+        }
+        .manifest-inner {
+            width: 120px; height: 120px; background: #020617; border-radius: 50%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+
+        .hidden { display: none !important; }
+        .loader { width: 16px; height: 16px; border: 2px solid #f59e0b; border-bottom-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+
+<body class="selection:bg-primary selection:text-black">
+
+    <div id="app" class="h-screen w-screen flex flex-col">
+        
+        <header class="h-14 border-b border-white/10 bg-surface/90 flex items-center justify-between px-4 shrink-0 z-50 backdrop-blur-md">
+            <div class="flex items-center gap-2">
+                <i data-lucide="swords" class="text-primary w-5 h-5"></i>
+                <h1 class="text-base font-black font-serif tracking-wider">DIVYA <span class="text-primary">ASTRA</span></h1>
+            </div>
+            <div id="user-info" class="hidden flex items-center gap-3">
+                <button onclick="showLeaderboard()" class="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors"><i data-lucide="trophy" class="w-4 h-4 text-primary"></i></button>
+                <div class="text-right border-l border-white/10 pl-3">
+                    <div class="text-[9px] text-muted font-bold uppercase">Sector</div>
+                    <div id="room-code-display" class="font-mono font-bold text-primary text-sm"></div>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#020617] to-black">
+            
+            <div id="toast-container" class="absolute top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
+
+            <div id="view-lobby" class="absolute inset-0 flex items-center justify-center p-4">
+                <div class="w-full max-w-sm bg-surface/80 border border-white/10 p-6 rounded-2xl shadow-2xl animate-pop backdrop-blur-xl">
+                    <h2 class="text-2xl font-black font-serif text-center mb-6 text-white">IDENTIFICATION</h2>
+                    <div class="space-y-4">
+                        <input type="text" id="input-name" placeholder="ENTER CODENAME" maxlength="12" class="w-full bg-bg border border-slate-700 rounded-lg px-4 py-3 font-bold text-center focus:border-primary outline-none text-white placeholder:text-muted">
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="createRoom()" class="bg-primary hover:bg-yellow-600 text-black font-bold py-3 rounded-lg transition-transform hover:scale-105">CREATE</button>
+                            <button onclick="showJoinInput()" class="border border-slate-600 hover:bg-white/5 text-white font-bold py-3 rounded-lg transition-colors">JOIN</button>
+                        </div>
+                        <div id="join-section" class="hidden pt-4 border-t border-white/10 flex gap-2">
+                            <input type="text" id="input-room" placeholder="CODE" maxlength="4" class="flex-1 bg-bg border border-slate-700 rounded-lg px-4 py-3 font-mono text-center uppercase text-white">
+                            <button onclick="joinRoom()" class="bg-white text-black font-bold px-6 rounded-lg">GO</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-waiting" class="hidden absolute inset-0 flex flex-col p-4">
+                <div class="w-full max-w-4xl mx-auto h-full flex flex-col bg-surface/50 border border-white/10 rounded-2xl overflow-hidden animate-fade">
+                    <div class="p-6 border-b border-white/10 flex flex-wrap justify-between items-center gap-4 bg-surface/80">
+                        <div>
+                            <div class="text-[10px] text-primary font-bold uppercase tracking-wider">Sector ID</div>
+                            <h2 class="text-4xl font-mono font-bold cursor-pointer hover:text-primary transition-colors text-white" onclick="navigator.clipboard.writeText(this.innerText); showToast('Copied')"><span id="waiting-room-code">----</span></h2>
+                        </div>
+                        <div id="host-controls" class="hidden flex gap-3 items-center">
+                            <div class="flex items-center gap-2 bg-bg border border-white/20 rounded px-2 py-2">
+                                <span class="text-[10px] font-bold text-muted uppercase">Cards:</span>
+                                <select id="hand-size-select" class="bg-transparent text-xs font-bold text-white outline-none">
+                                    </select>
+                            </div>
+                            <button onclick="startGame()" class="bg-gradient-to-r from-primary to-orange-500 text-black font-black py-3 px-6 rounded-lg uppercase tracking-wider flex items-center gap-2 shadow-glow hover:scale-105 transition-transform">
+                                DEPLOY <i data-lucide="rocket" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex-1 p-6 overflow-y-auto">
+                        <div id="player-list" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+                        <div id="waiting-msg" class="mt-12 text-center text-muted flex items-center justify-center gap-2"><span class="loader"></span> Waiting for host deployment...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-game" class="hidden absolute inset-0 flex flex-col">
+                <div class="h-10 bg-black/40 border-b border-white/5 flex items-center justify-center shrink-0 backdrop-blur-sm z-30">
+                    <div class="text-[10px] font-bold text-muted uppercase mr-3">Round <span id="round-number" class="text-white">1</span></div>
+                    <div id="game-status" class="px-4 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-surface border border-white/10">INITIALIZING</div>
+                </div>
+                <div id="game-arena" class="flex-1 relative w-full overflow-hidden"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://hiyzdemknntgtzybtbgr.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpeXpkZW1rbm50Z3R6eWJ0YmdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM4NzA3MzcsImV4cCI6MjA3OTQ0NjczN30.mjWQmJBfZQkZyh2xuqYBVplkTyOePYkIkxwEPJCmC4w";
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const STAT_CONFIG = {
+            destruction: { color: '#ef4444', icon: 'flame', glow: 'rgba(239, 68, 68, 0.5)' },
+            precision: { color: '#3b82f6', icon: 'crosshair', glow: 'rgba(59, 130, 246, 0.5)' },
+            range: { color: '#10b981', icon: 'radar', glow: 'rgba(16, 185, 129, 0.5)' },
+            speed: { color: '#eab308', icon: 'zap', glow: 'rgba(234, 179, 8, 0.5)' },
+            durability: { color: '#f97316', icon: 'shield', glow: 'rgba(249, 115, 22, 0.5)' },
+            mysticism: { color: '#a855f7', icon: 'sparkles', glow: 'rgba(168, 85, 247, 0.5)' }
+        };
+
+        const STAT_DESCRIPTIONS = {
+            destruction: "Raw damage potential.",
+            precision: "Accuracy of the strike.",
+            range: "Effective distance.",
+            speed: "Velocity of attack.",
+            durability: "Weapon resilience.",
+            mysticism: "Spiritual energy."
+        };
+
+        let state = { view: 'lobby', player: null, room: null, weapons: [], isResolving: false };
+
+        async function init() {
+            lucide.createIcons();
+            try {
+                const { data, error } = await supabase.from('weapons').select('*');
+                if (error || !data || !data.length) throw new Error("DB Error");
+                state.weapons = data;
+            } catch (e) {
+                alert("Unable to load weapons from secure database.");
+            }
+            
+            // Populate Hand Size Dropdown 3-30
+            const select = document.getElementById('hand-size-select');
+            select.innerHTML = '';
+            for(let i=3; i<=30; i++) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.innerText = i;
+                if(i===5) opt.selected = true;
+                select.appendChild(opt);
+            }
+        }
+        init();
+
+        function switchView(id) {
+            ['view-lobby', 'view-waiting', 'view-game'].forEach(v => document.getElementById(v).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+            state.view = id;
+        }
+
+        function showToast(msg) {
+            const t = document.createElement('div');
+            t.className = "px-4 py-2 rounded-lg bg-surface border-l-4 border-primary text-white text-xs font-bold shadow-xl animate-pop";
+            t.innerText = msg;
+            document.getElementById('toast-container').appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        function showJoinInput() { document.getElementById('join-section').classList.remove('hidden'); }
+
+        async function createRoom() {
+            const name = document.getElementById('input-name').value.trim();
+            if(!name) return showToast('Name Required');
+            const roomId = Math.random().toString(36).substring(2,6).toUpperCase();
+            const playerId = crypto.randomUUID();
+            await supabase.from('rooms').insert([{ id: roomId, host_id: playerId, settings: { hand_size: 5 } }]);
+            joinGameDB(roomId, playerId, name, true);
+        }
+
+        async function joinRoom() {
+            const name = document.getElementById('input-name').value.trim();
+            const roomId = document.getElementById('input-room').value.trim().toUpperCase();
+            if(!name || roomId.length!==4) return showToast('Invalid Input');
+            const { data: room } = await supabase.from('rooms').select('*').eq('id', roomId).single();
+            if(!room || room.status!=='waiting') return showToast('Room Unavailable');
+            joinGameDB(roomId, crypto.randomUUID(), name, false);
+        }
+
+        async function joinGameDB(roomId, playerId, name, isHost) {
+            await supabase.from('players').insert([{ id: playerId, room_id: roomId, name, is_host: isHost }]);
+            state.player = { id: playerId, name, isHost };
+            state.room = { id: roomId };
+            
+            document.getElementById('room-code-display').innerText = roomId;
+            document.getElementById('waiting-room-code').innerText = roomId;
+            document.getElementById('user-info').classList.remove('hidden');
+            if(isHost) document.getElementById('host-controls').classList.remove('hidden');
+            document.getElementById('waiting-msg').classList.add('hidden');
+            
+            supabase.channel(`room:${roomId}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, () => refreshGame(roomId))
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, handleRoomChange)
+                .subscribe();
+            refreshGame(roomId);
+            switchView('view-waiting');
+        }
+
+        async function refreshGame(roomId) {
+            const { data: players } = await supabase.from('players').select('*').eq('room_id', roomId);
+            const { data: room } = await supabase.from('rooms').select('*').eq('id', roomId).single();
+            if(!players || !room) return;
+
+            state.room = { ...state.room, ...room };
+            state.room.players = players.sort((a,b) => new Date(a.joined_at) - new Date(b.joined_at));
+            
+            const me = players.find(p => p.id === state.player.id);
+            if(me) state.player = { ...state.player, ...me };
+
+            if(state.view === 'view-waiting') {
+                document.getElementById('player-list').innerHTML = state.room.players.map(p => `
+                    <div class="bg-black/30 border border-white/10 p-3 rounded-lg flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-surface rounded flex items-center justify-center font-bold text-white border border-white/10">${p.name[0]}</div>
+                            <div class="font-bold text-white text-sm">${p.name} ${p.is_host?'<span class="text-primary text-[10px]">(HOST)</span>':''}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                updateGameUI();
+            }
+
+            if(state.room.status === 'finished') showLeaderboard(true);
+
+            if(state.player.isHost && state.room.status === 'turn_response' && !state.isResolving) {
+                if(state.room.players.every(p => p.selected_card)) {
+                    state.isResolving = true;
+                    resolveRound(state.room.last_action.stat);
+                }
+            }
+            lucide.createIcons();
+        }
+
+        function handleRoomChange(payload) {
+            const newRoom = payload.new;
+            if (newRoom.last_action?.phase === 'new_round' || newRoom.current_round > (state.room.current_round || 0)) {
+                state.player.selected_card = null;
+            }
+            state.room = { ...state.room, ...newRoom };
+            if(newRoom.status !== 'turn_response') state.isResolving = false;
+            if(state.view === 'view-waiting' && newRoom.status === 'turn_active') switchView('view-game');
+            updateGameUI();
+        }
+
+        async function startGame() {
+            if(!state.player.isHost) return;
+            const handSize = parseInt(document.getElementById('hand-size-select').value);
+            let deck = [];
+            while(deck.length < state.room.players.length * handSize) deck = [...deck, ...state.weapons];
+            
+            deck.sort(() => Math.random() - 0.5);
+            
+            for(const p of state.room.players) await supabase.from('players').update({ hand: deck.splice(0, handSize), selected_card: null }).eq('id', p.id);
+            await supabase.from('rooms').update({ status: 'turn_active', current_round: 1, current_turn_index: 0, last_action: { phase: 'start' } }).eq('id', state.room.id);
+        }
+
+        // --- UI RENDERER ---
+        function updateGameUI() {
+            if(!state.room || !state.room.players) return;
+            const arena = document.getElementById('game-arena');
+            const statusEl = document.getElementById('game-status');
+            const turnIdx = state.room.current_turn_index % state.room.players.length;
+            const activePlayer = state.room.players[turnIdx];
+            const isMyTurn = activePlayer.id === state.player.id;
+            
+            document.getElementById('round-number').innerText = state.room.current_round;
+
+            if(state.room.status === 'turn_active') {
+                if(isMyTurn) {
+                    statusEl.innerText = "YOUR TURN";
+                    statusEl.className = "px-6 py-0.5 bg-primary text-black font-bold rounded-full animate-pulse text-xs shadow-divine";
+                    if(state.player.selected_card) {
+                        arena.className = "arena-stage";
+                        arena.innerHTML = `<div class="flex flex-col items-center gap-4 animate-pop"><div class="text-primary font-bold uppercase tracking-widest border border-primary px-4 py-1 rounded text-xs">Locked</div>${renderCard(state.player.selected_card, '', false, 'stage')}</div>`;
+                    } else {
+                        arena.className = "arena-hand";
+                        arena.innerHTML = `<div class="hand-grid">${state.player.hand.map((c, i) => renderCard(c, `openSelectModal(${i})`, false, 'hand')).join('')}</div>`;
+                    }
+                } else {
+                    statusEl.innerText = `WAITING FOR ${activePlayer.name}`;
+                    statusEl.className = "px-4 py-0.5 bg-surface border border-white/20 rounded-full text-muted text-xs";
+                    arena.className = "arena-stage";
+                    let forceBtn = state.player.isHost ? `<button onclick="forceAttack('${activePlayer.id}')" class="mt-4 text-xs bg-red-900/50 border border-red-500 text-red-200 px-3 py-1 rounded font-bold hover:bg-red-800">FORCE ATTACK</button>` : '';
+                    arena.innerHTML = `<div class="text-center opacity-50"><div class="loader mb-4"></div><div class="text-lg font-bold uppercase text-white">${activePlayer.name}</div><div class="text-xs text-muted">is strategizing...</div>${forceBtn}</div>`;
+                }
+            } 
+            else if (state.room.status === 'turn_response') {
+                const stat = state.room.last_action.stat;
+                statusEl.innerHTML = `CLASH: ${stat}`;
+                statusEl.className = "px-6 py-0.5 bg-red-900/80 text-white border border-red-500 rounded-full font-bold text-xs uppercase shadow-glow";
+
+                if(state.player.selected_card) {
+                    const pending = state.room.players.filter(p => !p.selected_card);
+                    let waitingList = pending.map(p => `
+                        <div class="flex items-center gap-2 bg-surface border border-white/10 px-3 py-1.5 rounded-full">
+                            <span class="font-bold text-xs text-white">${p.name}</span>
+                            ${state.player.isHost ? `<button onclick="forceResponse('${p.id}')" class="text-[10px] bg-red-600 text-white px-1.5 rounded hover:bg-red-500">FORCE</button>` : ''}
+                        </div>
+                    `).join('');
+                    
+                    const card = state.player.selected_card;
+                    const activeStatConf = STAT_CONFIG[stat];
+                    
+                    arena.className = "arena-stage";
+                    arena.innerHTML = `
+                        <div class="w-full max-w-5xl flex flex-col md:flex-row items-stretch gap-6 animate-fade p-4">
+                            <div class="w-full md:w-5/12 relative rounded-2xl overflow-hidden border border-white/10 bg-black">
+                                <img src="image/${card.id}.jpg" class="w-full h-full object-cover opacity-80" onerror="this.src='https://source.unsplash.com/600x800/?abstract,${card.deity}'">
+                                <div class="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent"></div>
+                                <div class="absolute bottom-6 left-6 right-6">
+                                    <div class="text-[10px] bg-primary/20 text-primary border border-primary/40 px-2 py-0.5 rounded w-fit mb-1 uppercase font-bold tracking-widest">${card.type}</div>
+                                    <h2 class="text-4xl font-black font-serif text-white leading-none drop-shadow-xl mb-1">${card.name}</h2>
+                                    <div class="text-xs text-muted font-bold uppercase tracking-wide flex items-center gap-2"><i data-lucide="sparkles" class="w-3 h-3 text-purple-400"></i> ${card.deity}</div>
+                                </div>
+                            </div>
+                            <div class="flex-1 bg-surface border border-white/10 rounded-2xl p-6 flex flex-col">
+                                <div class="flex justify-between items-center mb-8 border-b border-white/10 pb-4">
+                                    <div>
+                                        <div class="text-[9px] font-bold text-muted uppercase tracking-widest">Current Turn</div>
+                                        <div class="text-lg font-bold text-white uppercase tracking-wide">${state.player.name}</div>
+                                    </div>
+                                    <div class="text-xs font-mono text-muted border border-white/10 px-2 py-1 rounded">ID: ${card.id}</div>
+                                </div>
+                                <div class="flex flex-col items-center mb-8">
+                                    <div class="text-[10px] font-bold text-muted uppercase tracking-widest mb-4">Power Manifestation</div>
+                                    <div class="manifest-circle" style="--m-color: ${activeStatConf.color}; --m-val: ${card.stats[stat]}; --m-glow: ${activeStatConf.glow}">
+                                        <div class="manifest-inner">
+                                            <div class="text-4xl font-black text-white">${card.stats[stat]}</div>
+                                            <div class="text-[9px] font-bold uppercase tracking-widest" style="color: ${activeStatConf.color}">${stat}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-bg/50 rounded-xl p-4 border border-white/5">
+                                    <div class="grid grid-cols-2 gap-x-6 gap-y-4">
+                                        ${Object.keys(STAT_CONFIG).map(k => {
+                                            const conf = STAT_CONFIG[k];
+                                            const val = card.stats[k];
+                                            const isSelected = k === stat;
+                                            return `
+                                            <div>
+                                                <div class="flex justify-between text-[9px] font-bold uppercase mb-1">
+                                                    <span class="flex items-center gap-1 ${isSelected ? 'text-white' : 'text-muted'}"><i data-lucide="${conf.icon}" class="w-3 h-3" style="color:${conf.color}"></i> ${k}</span>
+                                                    <span class="text-white font-mono">${val}</span>
+                                                </div>
+                                                <div class="stat-bar-bg h-1.5"><div class="stat-bar-fill" style="width: ${val}%; background-color: ${conf.color}"></div></div>
+                                            </div>`;
+                                        }).join('')}
+                                    </div>
+                                </div>
+                                <div class="mt-auto pt-6 text-center">
+                                    <div class="text-[9px] font-bold text-muted uppercase tracking-widest mb-2">Awaiting Hostiles</div>
+                                    <div class="flex flex-wrap justify-center gap-2">${waitingList || '<span class="text-primary text-xs font-bold animate-pulse">Calculating Outcome...</span>'}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                } else {
+                    arena.className = "arena-hand";
+                    arena.innerHTML = `<div class="hand-grid">${state.player.hand.map((c, i) => renderCard(c, `confirmResponse(${i})`, false, 'hand')).join('')}</div>`;
+                }
+            }
+            else if (state.room.status === 'resolving') {
+                statusEl.innerText = "COMPLETE";
+                statusEl.className = "px-6 py-0.5 bg-green-900/50 text-green-400 border border-green-500 rounded-full font-bold text-xs";
+                arena.className = "arena-stage";
+
+                const result = state.room.last_action;
+                const winners = result.winners || [];
+                const statKey = result.stat;
+                
+                const cardsHTML = state.room.players.map(p => {
+                    const isWinner = winners.includes(p.id);
+                    const avg = Math.round(Object.values(p.selected_card?.stats || {}).reduce((a,b)=>a+b,0)/6);
+                    const winnerClass = isWinner ? 'winner' : '';
+                    
+                    const allStatsHtml = Object.keys(STAT_CONFIG).map(k => {
+                        const conf = STAT_CONFIG[k];
+                        const val = p.selected_card?.stats[k] || 0;
+                        const isActive = k === result.stat;
+                        const opacity = isActive ? 'opacity-100' : 'opacity-60';
+                        return `
+                        <div class="flex flex-col gap-0.5 ${opacity} ${isActive ? 'scale-105 font-bold text-white' : 'text-gray-400'} transition-all">
+                            <div class="flex justify-between text-[7px] uppercase tracking-wider items-center">
+                                <span style="color:${isActive ? conf.color : 'inherit'}">${k.substring(0,3)}</span>
+                                <span>${val}</span>
+                            </div>
+                            <div class="stat-bar-bg h-1"><div class="stat-bar-fill" style="width: ${val}%; background-color: ${conf.color}"></div></div>
+                        </div>`;
+                    }).join('');
+
+                    return `
+                        <div class="card-res ${winnerClass} animate-fade">
+                            <div class="flex justify-between items-center mb-1">
+                                <div class="text-[10px] font-bold text-white uppercase tracking-widest">${p.name}</div>
+                                <div class="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded text-[10px] font-mono text-primary">${isWinner ? '<i data-lucide="trophy" class="w-3 h-3"></i>' : ''} +${isWinner ? Math.floor(100/winners.length) : 0}</div>
+                            </div>
+                            
+                            <div class="relative w-full h-56 rounded-lg overflow-hidden border border-white/10 shrink-0 bg-black/50">
+                                <img src="image/${p.selected_card.id}.jpg" class="w-full h-full object-cover" onerror="this.src='https://source.unsplash.com/300x450/?abstract,${p.selected_card.deity}'">
+                                <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+                                     <div class="text-[9px] font-bold text-primary uppercase tracking-widest mb-0.5">${p.selected_card.deity}</div>
+                                    <div class="text-lg font-black text-white leading-none font-serif">${p.selected_card.name}</div>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-between items-center text-[8px] font-bold uppercase text-muted">
+                                <span class="flex items-center gap-1"><i data-lucide="sparkles" class="w-3 h-3 text-purple-400"></i> ${p.selected_card.deity}</span>
+                                <span class="text-primary">${p.selected_card.type}</span>
+                            </div>
+                            <div class="flex items-center gap-2 bg-white/5 p-2 rounded border border-white/5">
+                                <div class="donut-chart shrink-0" style="--d-color: ${avg>85?'#f59e0b':'#3b82f6'}; --d-val: ${avg}%">
+                                    <div class="donut-inner">${avg}</div>
+                                </div>
+                                <div class="text-[9px] italic text-gray-400 leading-tight line-clamp-2">"${p.selected_card.desc}"</div>
+                            </div>
+
+                            ${p.selected_card.weakness ? `
+                            <div class="mt-1 bg-red-900/20 border border-red-500/30 px-2 py-1.5 rounded flex items-start gap-2">
+                                <i data-lucide="shield-alert" class="w-3 h-3 text-red-400 shrink-0 mt-0.5"></i>
+                                <div>
+                                    <div class="text-[7px] font-bold text-red-300 uppercase tracking-wider">Weakness</div>
+                                    <div class="text-[9px] font-bold text-white leading-tight">${p.selected_card.weakness}</div>
+                                </div>
+                            </div>` : ''}
+
+                            <div class="mt-auto pt-2 border-t border-white/10 grid grid-cols-2 gap-x-3 gap-y-1.5">
+                                ${allStatsHtml}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                const nextBtn = state.player.isHost ? `<button onclick="nextRound()" class="mt-8 bg-white text-black font-black py-3 px-8 rounded-full hover:scale-105 transition-transform flex items-center gap-2 shadow-glow">NEXT ROUND <i data-lucide="arrow-right" class="w-4 h-4"></i></button>` : `<div class="mt-8 text-xs font-bold text-muted uppercase bg-black/30 px-4 py-2 rounded-full">Waiting for host...</div>`;
+
+                arena.innerHTML = `<div class="flex flex-col items-center w-full pb-10"><h2 class="text-3xl font-black text-white uppercase mb-8 tracking-widest shadow-divine">${statKey}</h2><div class="flex flex-wrap justify-center items-start gap-6">${cardsHTML}</div>${nextBtn}</div>`;
+            }
+            lucide.createIcons();
+        }
+
+        function renderCard(card, onclick, isSelected, sizeContext) {
+            if(!card) return '';
+            const sizeClass = sizeContext === 'hand' ? 'card-hand' : 'card-stage';
+            const avg = Math.round(Object.values(card.stats).reduce((a,b)=>a+b,0)/6);
+            
+            return `
+            <div onclick="${onclick}" class="card ${sizeClass} ${isSelected?'selected':''} group cursor-pointer">
+                <div class="h-7 bg-black/40 border-b border-white/5 flex items-center justify-between px-2 shrink-0">
+                    <span class="text-[8px] font-bold text-primary uppercase truncate w-16">${card.deity}</span>
+                    <span class="text-[8px] text-muted font-mono">#${card.id}</span>
+                </div>
+                <div class="flex-1 relative bg-black overflow-hidden">
+                    <img src="image/${card.id}.jpg" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" onerror="this.src='https://source.unsplash.com/300x450/?abstract,${card.deity}'">
+                    <div class="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black to-transparent">
+                        <div class="text-xs font-black text-white font-serif leading-none drop-shadow-md">${card.name}</div>
+                    </div>
+                </div>
+                <div class="p-2 bg-surface/90 border-t border-white/5 flex justify-between items-center shrink-0">
+                    <div class="flex flex-col">
+                        <span class="text-[7px] font-bold text-muted uppercase">PWR</span>
+                        <span class="text-[10px] font-mono font-bold text-white">${avg}</span>
+                    </div>
+                    ${card.weakness ? `<div class="bg-red-900/30 px-1.5 py-0.5 rounded border border-red-500/20 text-[7px] text-red-400 font-bold uppercase truncate max-w-[60px]">${card.weakness}</div>` : ''}
+                </div>
+            </div>`;
+        }
+
+        function openSelectModal(idx) {
+            const card = state.player.hand[idx];
+            const modal = document.createElement('div');
+            modal.id = 'modal-select';
+            modal.className = "fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-fade backdrop-blur-sm";
+            
+            const statsGrid = Object.keys(card.stats).map(k => {
+                const conf = STAT_CONFIG[k];
+                return `
+                <button 
+                    onclick="playCard(${idx}, '${k}')"
+                    onmouseenter="updateStatDesc('${k}')"
+                    onmouseleave="resetStatDesc()"
+                    class="stat-btn"
+                    style="--btn-color: ${conf.color}; --btn-color-glow: ${conf.glow}"
+                >
+                    <div class="stat-icon-circle"><i data-lucide="${conf.icon}" class="w-4 h-4"></i></div>
+                    <span class="stat-label">${k}</span>
+                </button>`;
+            }).join('');
+
+            modal.innerHTML = `
+                <div class="w-full max-w-4xl bg-surface border border-white/10 rounded-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh] shadow-divine">
+                    <div class="w-full md:w-5/12 h-64 md:h-auto relative shrink-0 bg-black">
+                        <img src="image/${card.id}.jpg" class="w-full h-full object-cover opacity-80" onerror="this.src='https://source.unsplash.com/600x800/?abstract,${card.deity}'">
+                        <div class="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent md:bg-gradient-to-r"></div>
+                        <div class="absolute bottom-6 left-6 right-6">
+                             <div class="inline-block px-2 py-0.5 bg-primary/20 border border-primary/40 rounded text-[9px] font-bold text-primary uppercase mb-2 tracking-widest">${card.type}</div>
+                             <h2 class="text-3xl font-black font-serif text-white leading-none drop-shadow-lg">${card.name}</h2>
+                             <div class="text-xs text-muted font-bold uppercase mt-1 tracking-wide">${card.deity} Astra</div>
+                        </div>
+                        <button onclick="this.closest('#modal-select').remove()" class="absolute top-4 right-4 bg-black/60 hover:bg-white/20 p-2 rounded-full text-white backdrop-blur-md z-50"><i data-lucide="x" class="w-5 h-5"></i></button>
+                    </div>
+                    <div class="flex-1 p-6 md:p-8 overflow-y-auto bg-surface flex flex-col">
+                        <div class="mb-6 flex items-center justify-between">
+                            <div>
+                                <div class="text-[10px] font-bold text-muted uppercase tracking-widest">Current Turn</div>
+                                <div class="text-sm font-bold text-white uppercase tracking-wide">${state.player.name}</div>
+                            </div>
+                            <div class="text-xs font-mono text-muted border border-white/10 px-2 py-1 rounded">ID: ${card.id}</div>
+                        </div>
+                        
+                        <div class="mb-4 border border-white/10 rounded-lg p-4 bg-black/20 relative">
+                             <div class="absolute top-3 right-3 text-white/10"><i data-lucide="scroll" class="w-6 h-6"></i></div>
+                             <div class="text-[9px] font-bold text-red-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+                                <i data-lucide="book-open" class="w-3 h-3"></i> Legendary Usage
+                             </div>
+                             <p class="text-sm text-gray-300 italic font-serif leading-relaxed">"${card.desc}"</p>
+                        </div>
+
+                        <div class="mb-4 p-3 flex flex-col justify-center bg-white/5 rounded border border-white/5 min-h-[60px]">
+                            <div class="text-[9px] font-bold text-muted uppercase tracking-widest mb-1">Tactical Analysis</div>
+                            <span id="stat-desc-text" class="text-sm font-bold text-primary animate-fade">Select an attribute to unleash power</span>
+                        </div>
+
+                        <div class="mt-auto">
+                            <div class="text-[10px] font-bold text-muted uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <div class="h-px bg-white/10 flex-1"></div>Invoke Power<div class="h-px bg-white/10 flex-1"></div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3 md:gap-4">${statsGrid}</div>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            lucide.createIcons();
+        }
+
+        function updateStatDesc(key) {
+            const el = document.getElementById('stat-desc-text');
+            if(el) el.innerText = STAT_DESCRIPTIONS[key];
+        }
+
+        function resetStatDesc() {
+            const el = document.getElementById('stat-desc-text');
+            if(el) el.innerText = "Select an attribute to unleash power";
+        }
+
+        async function playCard(idx, stat) {
+            document.getElementById('modal-select').remove();
+            const card = state.player.hand[idx];
+            state.player.selected_card = card; 
+            updateGameUI();
+            await supabase.from('players').update({ selected_card: card }).eq('id', state.player.id);
+            await supabase.from('rooms').update({ status: 'turn_response', last_action: { phase: 'respond', stat, invoker_id: state.player.id } }).eq('id', state.room.id);
+        }
+
+        async function confirmResponse(idx) {
+            const card = state.player.hand[idx];
+            state.player.selected_card = card;
+            updateGameUI();
+            await supabase.from('players').update({ selected_card: card }).eq('id', state.player.id);
+        }
+
+        async function forceAttack(pid) {
+            const p = state.room.players.find(x => x.id === pid);
+            if(!p || !p.hand.length) return;
+            const card = p.hand[Math.floor(Math.random() * p.hand.length)];
+            const stats = Object.keys(card.stats);
+            const stat = stats[Math.floor(Math.random() * stats.length)];
+            await supabase.from('players').update({ selected_card: card }).eq('id', pid);
+            await supabase.from('rooms').update({ status: 'turn_response', last_action: { phase: 'respond', stat, invoker_id: pid } }).eq('id', state.room.id);
+        }
+
+        async function forceResponse(pid) {
+            const p = state.room.players.find(x => x.id === pid);
+            if(!p || !p.hand.length) return;
+            const card = p.hand[Math.floor(Math.random() * p.hand.length)];
+            await supabase.from('players').update({ selected_card: card }).eq('id', pid);
+        }
+
+        async function resolveRound(stat) {
+            const players = state.room.players;
+            let max = -1, winners = [];
+            players.forEach(p => {
+                const val = p.selected_card?.stats[stat] || 0;
+                if(val > max) { max = val; winners = [p.id]; }
+                else if(val === max) winners.push(p.id);
+            });
+            const points = Math.floor(100/winners.length);
+            for(const wid of winners) {
+                const cur = players.find(p=>p.id===wid).score || 0;
+                await supabase.from('players').update({ score: cur + points }).eq('id', wid);
+            }
+            await supabase.from('rooms').update({ status: 'resolving', last_action: { phase: 'result', stat, winners, maxVal: max } }).eq('id', state.room.id);
+        }
+
+        async function nextRound() {
+            if(!state.player.isHost) return;
+            let gameOver = false;
+            for(const p of state.room.players) {
+                if(!p.hand.length) continue;
+                const newHand = p.hand.filter(c => c.id !== p.selected_card.id);
+                if(newHand.length === 0) gameOver = true;
+                await supabase.from('players').update({ hand: newHand, selected_card: null }).eq('id', p.id);
+            }
+            if(gameOver) await supabase.from('rooms').update({ status: 'finished' }).eq('id', state.room.id);
+            else await supabase.from('rooms').update({ status: 'turn_active', current_round: state.room.current_round + 1, current_turn_index: (state.room.current_turn_index + 1) % state.room.players.length, last_action: { phase: 'new_round' } }).eq('id', state.room.id);
+        }
+
+        function showLeaderboard(isFinished = false) {
+            const list = [...state.room.players].sort((a,b)=>(b.score||0)-(a.score||0));
+            if(isFinished) {
+                confetti({ particleCount: 300, spread: 100, origin: { y: 0.6 } });
+            }
+            const m = document.createElement('div');
+            m.className = "fixed inset-0 z-[120] bg-black/95 flex items-center justify-center p-4 animate-fade backdrop-blur-md";
+            
+            const content = list.map((p,i)=> {
+                const viewBtn = (state.player.isHost && !isFinished) ? `<button onclick="viewArsenal('${p.id}')" class="ml-2 text-[10px] bg-white/10 px-2 py-1 rounded hover:bg-white/20">👁 VIEW ARSENAL</button>` : '';
+                return `
+                <div class="flex items-center justify-between p-3 rounded-lg bg-bg border ${i===0?'border-primary shadow-glow':'border-white/5'}">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded flex items-center justify-center font-bold text-black ${i===0?'bg-primary':'bg-white/10 text-white'}">${i+1}</div>
+                        <div>
+                            <div class="font-bold text-white text-sm">${p.name}</div>
+                            ${i===0 ? '<div class="text-[9px] text-primary uppercase font-bold tracking-wider">Leading</div>' : ''}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="font-mono font-bold text-xl text-white">${p.score||0}</div>
+                        ${viewBtn}
+                    </div>
+                </div>`;
+            }).join('');
+
+            const victoryBanner = isFinished ? `<div class="text-center mb-6"><div class="text-4xl font-black text-primary uppercase animate-bounce">VICTORY</div><div class="text-white text-lg font-serif">WARFARE CONCLUDED</div></div>` : '';
+
+            m.innerHTML = `
+                <div class="bg-surface border border-white/10 rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+                    <div class="p-6 pb-2 shrink-0">
+                        ${victoryBanner}
+                        <h2 class="text-xl font-black text-center uppercase text-white tracking-widest">${isFinished ? 'Final Standing' : 'Live Ranking'}</h2>
+                    </div>
+                    <div class="flex-1 overflow-y-auto custom-scrollbar px-6 py-2 space-y-2">
+                        ${content}
+                    </div>
+                    <div class="p-6 pt-4 shrink-0">
+                        <div class="flex gap-2">
+                            <button onclick="this.closest('.fixed').remove()" class="flex-1 py-3 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-xs uppercase text-white">Close</button>
+                            ${isFinished ? `<button onclick="location.reload()" class="flex-1 py-3 bg-primary hover:bg-yellow-600 rounded-lg font-bold text-xs uppercase text-black">New Game</button>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(m);
+        }
+
+        function viewArsenal(pid) {
+            const p = state.room.players.find(x=>x.id===pid);
+            if(!p) return;
+            const m = document.createElement('div');
+            m.className = "fixed inset-0 z-[130] bg-black/95 flex items-center justify-center p-4 animate-fade backdrop-blur-md";
+            
+            const gridContent = p.hand.map((c, index) => {
+                const avg = Math.round(Object.values(c.stats).reduce((a,b)=>a+b,0)/6);
+                return `
+                <div class="bg-surface border border-white/10 rounded-xl overflow-hidden flex flex-col shadow-lg">
+                    <div class="h-48 relative bg-black">
+                        <img src="image/${c.id}.jpg" class="w-full h-full object-cover object-center opacity-80" onerror="this.src='https://source.unsplash.com/400x300/?abstract,${c.deity}'">
+                        <div class="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent"></div>
+                        <div class="absolute bottom-3 left-3 right-3">
+                            <div class="flex justify-between items-end">
+                                <div>
+                                    <div class="text-2xl font-black font-serif text-white leading-none drop-shadow-md">${c.name}</div>
+                                    <div class="text-[10px] font-bold text-muted uppercase tracking-wider mt-1 flex items-center gap-1">
+                                        <span class="text-purple-400">${c.deity}</span> • <span class="text-primary">${c.type}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-md border border-white/10 px-2 py-1 rounded text-[9px] font-bold text-white uppercase tracking-widest">
+                            #${index + 1}
+                        </div>
+                    </div>
+                    <div class="p-4 flex-1 flex flex-col gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="donut-chart shrink-0" style="--d-color: ${avg>85?'#f59e0b':'#3b82f6'}; --d-val: ${avg}%">
+                                <div class="donut-inner text-[10px]">${avg}</div>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-[9px] font-bold text-muted uppercase tracking-widest mb-0.5">Legendary Usage</div>
+                                <div class="text-xs text-gray-300 italic leading-tight line-clamp-2">"${c.desc}"</div>
+                            </div>
+                        </div>
+                        ${c.weakness ? `
+                        <div class="mt-auto pt-3 border-t border-white/5">
+                            <div class="flex items-center gap-2 text-red-400/80">
+                                <i data-lucide="shield-alert" class="w-3 h-3"></i>
+                                <span class="text-[9px] font-bold uppercase tracking-wider">Weakness: ${c.weakness}</span>
+                            </div>
+                        </div>` : ''}
+                    </div>
+                </div>`;
+            }).join('');
+
+            m.innerHTML = `
+                <div class="bg-bg border border-white/10 w-full max-w-6xl max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden">
+                    <div class="p-6 border-b border-white/10 flex justify-between items-center bg-surface shrink-0">
+                        <div>
+                            <div class="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">Battle Intelligence</div>
+                            <h3 class="font-black font-serif text-3xl text-white uppercase tracking-wide">${p.name}'s Arsenal</h3>
+                        </div>
+                        <button onclick="this.closest('.fixed').remove()" class="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors"><i data-lucide="x" class="text-white w-6 h-6"></i></button>
+                    </div>
+                    <div class="flex-1 p-6 overflow-y-auto custom-scrollbar bg-black/20">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            ${gridContent}
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(m);
+            lucide.createIcons();
+        }
+    </script>
+</body>
+</html>
